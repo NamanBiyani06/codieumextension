@@ -4,14 +4,20 @@
   "description": "comment coder",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.104.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "*"
+    "onCommand:codieumextension.helloWorld",
+    "onCommand:codieumextension.showStatus",
+    "onCommand:codieumextension.showCodeCommentsPanel"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NamanBiyani06/codieumextension.git"
+  },
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -38,7 +44,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.104.0",
+    "@types/vscode": "^1.99.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@typescript-eslint/eslint-plugin": "^8.42.0",

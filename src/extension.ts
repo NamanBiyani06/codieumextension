@@ -35,56 +35,43 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		const code = editor.document.getText();
 		const fileName = editor.document.fileName.split('/').pop() || editor.document.fileName;
+		
 		// Split code into lines
 		const codeLines = code.split('\n');
-		// Generate placeholder comments for each line
-		const commentLines = codeLines.map((line, idx) => `Comment for line ${idx + 1}`);
-		// Build table rows
-		let tableRows = '';
-		for (let i = 0; i < codeLines.length; i++) {
-			tableRows += `<tr>\n<td class='code-cell'><pre>${escapeHtml(codeLines[i])}</pre></td>\n<td class='comment-cell'>${escapeHtml(commentLines[i])}</td>\n</tr>`;
-		}
-		// Create and show panel
-		const panel = vscode.window.createWebviewPanel(
-			'codeCommentsPanel',
-			'Code & Comments Side by Side',
-			vscode.ViewColumn.Beside,
-			{ enableScripts: false }
-		);
-		panel.webview.html = `
-		<!DOCTYPE html>
-		<html lang='en'>
-		<head>
-			<meta charset='UTF-8'>
-			<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-			<title>Code & Comments</title>
-			<style>
-				body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 16px; }
-				.header { margin-bottom: 16px; }
-				.header h1 { font-size: 1.2em; margin: 0; }
-				.file-name { font-size: 0.9em; color: var(--vscode-descriptionForeground); margin-top: 4px; }
-				table { width: 100%; border-collapse: collapse; }
-				th, td { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; vertical-align: top; }
-				.code-cell { background: var(--vscode-editor-background); width: 60%; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
-				.comment-cell { background: var(--vscode-textCodeBlock-background); width: 40%; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-descriptionForeground); }
-			</style>
-		</head>
-		<body>
-			<div class='header'>
-				<h1>Code & Comments Side by Side</h1>
-				<div class='file-name'>${escapeHtml(fileName)}</div>
-			</div>
-			<table>
-				<thead>
-					<tr><th>Code</th><th>Comment</th></tr>
-				</thead>
-				<tbody>
-					${tableRows}
-				</tbody>
-			</table>
-		</body>
-		</html>
-		`;
+		
+		// Generate Lorem Ipsum comments for each line
+		const loremVariations = [
+			"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+			"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+			"Ut enim ad minim veniam, quis nostrud exercitation ullamco.",
+			"Laboris nisi ut aliquip ex ea commodo consequat.",
+			"Duis aute irure dolor in reprehenderit in voluptate velit esse.",
+			"Cillum dolore eu fugiat nulla pariatur.",
+			"Excepteur sint occaecat cupidatat non proident.",
+			"Sunt in culpa qui officia deserunt mollit anim id est laborum.",
+			"Sed ut perspiciatis unde omnis iste natus error sit.",
+			"Voluptatem accusantium doloremque laudantium, totam rem aperiam."
+		];
+		
+		// Generate comment lines that match line numbers exactly
+		const commentLines = codeLines.map((line, idx) => {
+			if (line.trim().length === 0) return ''; // Empty line for empty code lines
+			const loremIndex = idx % loremVariations.length;
+			return loremVariations[loremIndex];
+		});
+		
+		// Create a temporary comments file
+		const commentsContent = commentLines.join('\n');
+		const commentsFileName = fileName.replace(/\.[^/.]+$/, '_comments.txt');
+		
+		// Create and open the comments file
+		vscode.workspace.openTextDocument({
+			content: commentsContent,
+			language: 'plaintext'
+		}).then(doc => {
+			vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+			vscode.window.showInformationMessage(`Comments file created: ${commentsFileName}`);
+		});
 	});
 	context.subscriptions.push(disposable3);
 
