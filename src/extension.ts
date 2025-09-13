@@ -62,9 +62,50 @@ function loadDatabaseFromDisk(): void {
 		} else {
 			console.log('No existing database found, starting with empty database');
 		}
-	} catch (error) {
-		console.error('Failed to load database:', error);
-		summaryDatabase = new Map();
+		const code = editor.document.getText();
+		const fileName = editor.document.fileName.split('/').pop() || editor.document.fileName;
+		
+		// Split code into lines
+		const codeLines = code.split('\n');
+		
+		// Generate Lorem Ipsum comments for each line
+		const loremVariations = [
+			"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+			"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+			"Ut enim ad minim veniam, quis nostrud exercitation ullamco.",
+			"Laboris nisi ut aliquip ex ea commodo consequat.",
+			"Duis aute irure dolor in reprehenderit in voluptate velit esse.",
+			"Cillum dolore eu fugiat nulla pariatur.",
+			"Excepteur sint occaecat cupidatat non proident.",
+			"Sunt in culpa qui officia deserunt mollit anim id est laborum.",
+			"Sed ut perspiciatis unde omnis iste natus error sit.",
+			"Voluptatem accusantium doloremque laudantium, totam rem aperiam."
+		];
+		
+		// Generate comment lines that match line numbers exactly
+		const commentLines = codeLines.map((line, idx) => {
+			if (line.trim().length === 0) return ''; // Empty line for empty code lines
+			const loremIndex = idx % loremVariations.length;
+			return loremVariations[loremIndex];
+		});
+		
+		// Create a temporary comments file
+		const commentsContent = commentLines.join('\n');
+		const commentsFileName = fileName.replace(/\.[^/.]+$/, '_comments.txt');
+		
+		// Create and open the comments file
+		vscode.workspace.openTextDocument({
+			content: commentsContent,
+			language: 'plaintext'
+		}).then(doc => {
+			vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+			vscode.window.showInformationMessage(`Comments file created: ${commentsFileName}`);
+		});
+	});
+	context.subscriptions.push(disposable3);
+
+	function escapeHtml(text: string): string {
+		return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 	}
 }
 
