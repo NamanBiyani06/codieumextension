@@ -26,6 +26,18 @@
       {
         "command": "codieumextension.showCodeCommentsPanel",
         "title": "Show Code & Comments Side by Side"
+      },
+      {
+        "command": "codieumextension.showLineByLineComments",
+        "title": "Show Line-by-Line Comments"
+      },
+      {
+        "command": "codieumextension.showScopeLevelComments",
+        "title": "Show Scope-Level Comments"
+      },
+      {
+        "command": "codieumextension.showFileSummary",
+        "title": "Show File Summary"
       }
     ]
   },
@@ -38,14 +50,15 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.104.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/vscode": "^1.104.0",
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.34.0",
     "typescript": "^5.9.2",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "vsce": "^1.103.1"
   }
 }
