@@ -28,16 +28,8 @@
         "title": "Show Code & Comments Side by Side"
       },
       {
-        "command": "codieumextension.showLineByLineComments",
-        "title": "Show Line-by-Line Comments"
-      },
-      {
-        "command": "codieumextension.showScopeLevelComments",
-        "title": "Show Scope-Level Comments"
-      },
-      {
-        "command": "codieumextension.showFileSummary",
-        "title": "Show File Summary"
+        "command": "codieumextension.showUnifiedCommentPanel",
+        "title": "Show Unified Comment Panel"
       }
     ]
   },
