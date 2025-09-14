@@ -257,9 +257,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Function to generate HTML for the panel
 	function generateHTML(fileName: string, content: string, isLoading: boolean = false): string {
-		const levelConfig = ABSTRACTION_LEVELS[currentAbstractionLevel as keyof typeof ABSTRACTION_LEVELS];
-		const shortFileName = fileName.split('/').pop() || fileName;
-
 		return `
 			<!DOCTYPE html>
 			<html lang="en">
@@ -273,67 +270,50 @@ export function activate(context: vscode.ExtensionContext) {
 						font-size: var(--vscode-font-size);
 						color: var(--vscode-foreground);
 						background-color: var(--vscode-editor-background);
-						padding: 16px;
+						padding: 0;
 						margin: 0;
 						line-height: 1.6;
-					}
-
-					.container {
-						max-width: 100%;
-						margin: 0 auto;
-					}
-
-					.header {
-						border-bottom: 1px solid var(--vscode-panel-border);
-						padding-bottom: 12px;
-						margin-bottom: 16px;
-					}
-
-					.header h1 {
-						margin: 0;
-						font-size: 1.2em;
-						font-weight: 600;
-						color: var(--vscode-panelTitle-activeForeground);
-					}
-
-					.file-name {
-						font-size: 0.9em;
-						color: var(--vscode-descriptionForeground);
-						margin-top: 4px;
-						font-family: var(--vscode-editor-font-family);
+						height: 100vh;
+						display: flex;
+						flex-direction: column;
 					}
 
 					.slider-container {
-						margin: 16px 0;
-						padding: 16px;
-						background-color: var(--vscode-textCodeBlock-background);
+						position: fixed;
+						bottom: 20px;
+						right: 20px;
+						z-index: 1000;
+						background-color: var(--vscode-panel-background);
 						border: 1px solid var(--vscode-panel-border);
-						border-radius: 4px;
+						border-radius: 6px;
+						padding: 8px 12px;
+						box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+						opacity: 0.7;
+						transition: opacity 0.2s ease;
 					}
 
-					.slider-label {
-						font-size: 0.9em;
-						color: var(--vscode-descriptionForeground);
-						margin-bottom: 8px;
-						font-weight: 500;
+					.slider-container:hover {
+						opacity: 1;
 					}
 
 					.slider-wrapper {
 						display: flex;
 						align-items: center;
-						gap: 12px;
+						gap: 8px;
+						min-width: 120px;
 					}
 
 					.slider-text {
-						font-size: 0.8em;
+						font-size: 0.7em;
 						color: var(--vscode-descriptionForeground);
-						min-width: 60px;
+						min-width: 20px;
+						text-align: center;
 					}
 
 					.slider {
 						flex: 1;
-						height: 6px;
-						border-radius: 3px;
+						height: 3px;
+						border-radius: 2px;
 						background: var(--vscode-scrollbarSlider-background);
 						outline: none;
 						-webkit-appearance: none;
@@ -343,42 +323,33 @@ export function activate(context: vscode.ExtensionContext) {
 					.slider::-webkit-slider-thumb {
 						-webkit-appearance: none;
 						appearance: none;
-						width: 16px;
-						height: 16px;
+						width: 12px;
+						height: 12px;
 						border-radius: 50%;
 						background: var(--vscode-button-background);
 						cursor: pointer;
 					}
 
 					.slider::-moz-range-thumb {
-						width: 16px;
-						height: 16px;
+						width: 12px;
+						height: 12px;
 						border-radius: 50%;
 						background: var(--vscode-button-background);
 						cursor: pointer;
 						border: none;
 					}
 
-					.level-name {
-						font-size: 0.9em;
-						color: var(--vscode-panelTitle-activeForeground);
-						font-weight: 500;
-						margin-top: 8px;
-					}
-
 					.content {
-						background-color: var(--vscode-textCodeBlock-background);
-						border: 1px solid var(--vscode-panel-border);
-						border-radius: 4px;
-						padding: 16px;
-						overflow-x: auto;
-						min-height: 100px;
+						flex: 1;
+						padding: 20px;
+						overflow-y: auto;
+						padding-bottom: 80px; /* Space for floating slider */
 					}
 
 					.summary-text {
 						font-family: var(--vscode-editor-font-family);
 						font-size: var(--vscode-editor-font-size);
-						line-height: 1.5;
+						line-height: 1.6;
 						color: var(--vscode-editor-foreground);
 						white-space: pre-wrap;
 					}
@@ -387,39 +358,18 @@ export function activate(context: vscode.ExtensionContext) {
 						color: var(--vscode-descriptionForeground);
 						font-style: italic;
 					}
-
-					.footer {
-						margin-top: 16px;
-						padding-top: 12px;
-						border-top: 1px solid var(--vscode-panel-border);
-						font-size: 0.9em;
-						color: var(--vscode-descriptionForeground);
-					}
 				</style>
 			</head>
 			<body>
-				<div class="container">
-					<div class="header">
-						<h1>AI Code Analysis</h1>
-						<div class="file-name">${escapeHtml(shortFileName)}</div>
-					</div>
+				<div class="content">
+					<div class="summary-text ${isLoading ? 'loading' : ''}">${escapeHtml(content)}</div>
+				</div>
 
-					<div class="slider-container">
-						<div class="slider-label">Abstraction Level</div>
-						<div class="slider-wrapper">
-							<span class="slider-text">Abstract</span>
-							<input type="range" min="1" max="5" value="${currentAbstractionLevel}" class="slider" id="abstractionSlider">
-							<span class="slider-text">Detailed</span>
-						</div>
-						<div class="level-name">${levelConfig.name}</div>
-					</div>
-
-					<div class="content">
-						<div class="summary-text ${isLoading ? 'loading' : ''}">${escapeHtml(content)}</div>
-					</div>
-
-					<div class="footer">
-						AI-powered code analysis with database storage. Summaries are stored locally to save API tokens.
+				<div class="slider-container">
+					<div class="slider-wrapper">
+						<span class="slider-text">1</span>
+						<input type="range" min="1" max="5" value="${currentAbstractionLevel}" class="slider" id="abstractionSlider">
+						<span class="slider-text">5</span>
 					</div>
 				</div>
 
