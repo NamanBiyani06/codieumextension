@@ -49,6 +49,11 @@ export function activate(context: vscode.ExtensionContext) {
 		commentManager.updateCurrentLineHighlight();
 	});
 
+	// Auto-refresh context when files change
+	vscode.workspace.onDidSaveTextDocument((document) => {
+		commentManager.handleFileChange(document);
+	});
+
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
@@ -144,6 +149,7 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 	});
 
 	context.subscriptions.push(disposable5);
+
 
 	// Create status bar items for comment level switching
 	const statusBarItems: vscode.StatusBarItem[] = [];

@@ -566,6 +566,7 @@ export class CommentManager {
 
             let processed = 0;
             const allSummaries: string[] = [];
+            let originalSize = 0;
 
             for (const filePath of codeFiles) {
                 try {
@@ -573,6 +574,10 @@ export class CommentManager {
                         increment: (processed / totalFiles) * 100, 
                         message: `Processing ${path.basename(filePath)}...` 
                     });
+
+                    // Calculate original file size for metrics
+                    const fileContent = require('fs').readFileSync(filePath, 'utf8');
+                    originalSize += fileContent.length;
 
                     // Generate summary comments (level 2 - good balance for Cursor)
                     const comments = await this.generateCommentsForFile(filePath, 2);
@@ -630,14 +635,20 @@ ${allSummaries.join('\n\n')}
 
             progress.report({ increment: 100, message: "Export complete!" });
             
+            // Calculate and show metrics
+            const contextSize = require('fs').statSync(contextFilePath).size;
+            const tokenSavings = Math.round(((originalSize - contextSize) / Math.max(originalSize, 1)) * 100);
+            
             vscode.window.showInformationMessage(
-                `✅ Scope context exported! ${totalFiles} files processed into PROJECT-CONTEXT.md`,
-                'Open Context File'
+                `✅ Scope context exported! ${totalFiles} files → ${Math.round(contextSize/1000)}K (${tokenSavings}% token savings)`,
+                'Open Context File', 'Show Metrics'
             ).then(selection => {
                 if (selection === 'Open Context File') {
                     vscode.workspace.openTextDocument(contextFilePath).then(doc => {
                         vscode.window.showTextDocument(doc);
                     });
+                } else if (selection === 'Show Metrics') {
+                    this.showContextQualityMetrics();
                 }
             });
 
@@ -816,6 +827,207 @@ ${allSummaries.join('\n\n')}
                 line: currentLine
             });
         });
+    }
+
+    // Auto-refresh and metrics features
+    private contextMetrics = {
+        filesProcessed: 0,
+        totalTokensSaved: 0,
+        lastRefresh: new Date(),
+        refreshCount: 0
+    };
+
+    handleFileChange(document: vscode.TextDocument): void {
+        // Auto-refresh context when code files change
+        const fileName = document.fileName;
+        const isCodeFile = this.detectLanguage(path.basename(fileName)) !== 'text';
+        
+        if (isCodeFile) {
+            console.log(`File changed: ${fileName} - Context may need refresh`);
+            
+            // Show subtle notification
+            vscode.window.showInformationMessage(
+                `📝 ${path.basename(fileName)} changed - Context may be outdated`,
+                'Refresh Context'
+            ).then(selection => {
+                if (selection === 'Refresh Context') {
+                    vscode.commands.executeCommand('codieumextension.batchExportComments');
+                }
+            });
+        }
+    }
+
+    showContextQualityMetrics(): void {
+        // Create metrics dashboard
+        const panel = vscode.window.createWebviewPanel(
+            'scopeMetrics',
+            '📊 Scope Context Metrics',
+            vscode.ViewColumn.One,
+            { enableScripts: true }
+        );
+
+        panel.webview.html = this.generateMetricsHTML();
+    }
+
+    private generateMetricsHTML(): string {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) return '<h1>No workspace found</h1>';
+
+        // Calculate metrics
+        const projectPath = workspaceFolders[0].uri.fsPath;
+        const contextFile = path.join(projectPath, 'PROJECT-CONTEXT.md');
+        const hasContext = require('fs').existsSync(contextFile);
+        
+        let contextSize = 0;
+        let originalSize = 0;
+        let tokenSavings = 0;
+
+        if (hasContext) {
+            const contextContent = require('fs').readFileSync(contextFile, 'utf8');
+            contextSize = contextContent.length;
+            
+            // Estimate original codebase size
+            this.findCodeFiles(projectPath).then(files => {
+                files.forEach(file => {
+                    try {
+                        const content = require('fs').readFileSync(file, 'utf8');
+                        originalSize += content.length;
+                    } catch (e) {}
+                });
+            });
+            
+            tokenSavings = Math.round(((originalSize - contextSize) / originalSize) * 100);
+        }
+
+        return `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Scope Metrics</title>
+                <style>
+                    body {
+                        font-family: 'SF Mono', Monaco, monospace;
+                        background: #000;
+                        color: #00ff00;
+                        padding: 32px;
+                        margin: 0;
+                        line-height: 1.6;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 40px;
+                    }
+                    .logo {
+                        font-size: 32px;
+                        margin-bottom: 16px;
+                    }
+                    .title {
+                        font-size: 24px;
+                        font-weight: 600;
+                        margin-bottom: 8px;
+                    }
+                    .subtitle {
+                        color: #00aa00;
+                        font-size: 14px;
+                    }
+                    .metrics-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                        gap: 20px;
+                        margin: 40px 0;
+                    }
+                    .metric-card {
+                        background: #111;
+                        border: 1px solid #333;
+                        border-radius: 8px;
+                        padding: 20px;
+                        text-align: center;
+                    }
+                    .metric-value {
+                        font-size: 32px;
+                        font-weight: 600;
+                        color: #00ff00;
+                        margin-bottom: 8px;
+                    }
+                    .metric-label {
+                        color: #00aa00;
+                        font-size: 14px;
+                    }
+                    .status {
+                        margin: 20px 0;
+                        padding: 16px;
+                        background: ${hasContext ? '#003300' : '#330000'};
+                        border: 1px solid ${hasContext ? '#00ff00' : '#ff4444'};
+                        border-radius: 8px;
+                        text-align: center;
+                    }
+                    .actions {
+                        text-align: center;
+                        margin-top: 32px;
+                    }
+                    .btn {
+                        background: #00ff00;
+                        color: #000;
+                        border: none;
+                        padding: 12px 24px;
+                        border-radius: 6px;
+                        font-family: inherit;
+                        font-weight: 600;
+                        cursor: pointer;
+                        margin: 0 8px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo">🎯</div>
+                    <div class="title">Scope Context Metrics</div>
+                    <div class="subtitle">AI Context Optimization Dashboard</div>
+                </div>
+
+                <div class="status">
+                    ${hasContext ? 
+                        '✅ PROJECT-CONTEXT.md exists - Cursor can use optimized context' : 
+                        '❌ No context file found - Run "Export Comments for Cursor" to optimize'
+                    }
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">${Math.round(contextSize / 1000)}K</div>
+                        <div class="metric-label">Context File Size</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${Math.round(originalSize / 1000)}K</div>
+                        <div class="metric-label">Original Codebase Size</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${tokenSavings}%</div>
+                        <div class="metric-label">Token Savings</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${this.contextMetrics.filesProcessed}</div>
+                        <div class="metric-label">Files Processed</div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn" onclick="refreshContext()">🔄 Refresh Context</button>
+                    <button class="btn" onclick="openContext()">📄 View Context File</button>
+                </div>
+
+                <script>
+                    function refreshContext() {
+                        vscode.postMessage({ command: 'refreshContext' });
+                    }
+                    function openContext() {
+                        vscode.postMessage({ command: 'openContext' });
+                    }
+                </script>
+            </body>
+            </html>
+        `;
     }
 }
 
