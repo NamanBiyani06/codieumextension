@@ -84,21 +84,23 @@ export class CommentManager {
             const fileName = path.basename(originalFilePath);
             const commentsFileName = fileName.replace(/\.[^/.]+$/, '_comments.txt');
 
-            // Create and open the comments file
-            const commentsDoc = await vscode.workspace.openTextDocument({
-                content: commentsContent,
-                language: 'plaintext'
-            });
+            // Create beautiful Scope webview with terminal styling
+            const panel = vscode.window.createWebviewPanel(
+                'scope',
+                `🎯 Scope AI • ${fileName}`,
+                vscode.ViewColumn.Beside,
+                { enableScripts: true, retainContextWhenHidden: true }
+            );
 
-            // Show both files side by side
-            const commentsEditor = await vscode.window.showTextDocument(commentsDoc, vscode.ViewColumn.Beside);
+            // Generate terminal-style HTML
+            panel.webview.html = this.generateTerminalHTML(fileName, commentsContent);
             
-            // Store references for hover highlighting
+            // Store references for cursor sync
             this.originalFilePath = originalFilePath;
-            this.commentsEditor = commentsEditor;
+            this.currentPanel = panel;
             
-            // Set up cursor sync - when cursor moves in original file, highlight corresponding line in comments
-            this.setupCursorSync();
+            // Set up cursor sync for webview
+            this.setupWebviewCursorSync();
             
             vscode.window.showInformationMessage(`Smart comments generated for ${fileName} using LLM!`);
 
@@ -123,10 +125,10 @@ export class CommentManager {
             this.currentFilePath = originalFilePath;
             this.currentLevel = initialLevel;
             
-            // Create webview panel
+            // Create webview panel with Scope branding
             this.currentPanel = vscode.window.createWebviewPanel(
                 'aiCommentsPanel',
-                `AI Comments: ${fileName}`,
+                `🎯 Scope AI • ${fileName}`,
                 vscode.ViewColumn.Beside,
                 {
                     enableScripts: true,
@@ -296,13 +298,12 @@ export class CommentManager {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>AI Comments - ${fileName}</title>
+                <title>Scope AI</title>
                 <style>
                     body {
-                        font-family: var(--vscode-font-family);
-                        font-size: var(--vscode-font-size);
-                        color: var(--vscode-foreground);
-                        background-color: var(--vscode-editor-background);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        background: #000;
+                        color: #00ff00;
                         padding: 0;
                         margin: 0;
                         height: 100vh;
@@ -311,19 +312,19 @@ export class CommentManager {
                     }
 
                     .header {
-                        background-color: var(--vscode-panel-background);
-                        border-bottom: 1px solid var(--vscode-panel-border);
+                        background: #111;
+                        border-bottom: 1px solid #333;
                         padding: 15px 20px;
                     }
 
                     .header h2 {
                         margin: 0 0 8px 0;
-                        color: var(--vscode-panelTitle-activeForeground);
+                        color: #00ff00;
                         font-size: 1.2em;
                     }
 
                     .level-info {
-                        color: var(--vscode-descriptionForeground);
+                        color: #00aa00;
                         font-size: 0.9em;
                         margin-bottom: 15px;
                     }
@@ -346,19 +347,19 @@ export class CommentManager {
                         width: 40px;
                         text-align: right;
                         padding-right: 10px;
-                        color: var(--vscode-editorLineNumber-foreground);
-                        font-family: var(--vscode-editor-font-family);
-                        font-size: var(--vscode-editor-font-size);
+                        color: #00aa00;
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 13px;
                         user-select: none;
                         opacity: 0.7;
                     }
 
                     .comment-text {
                         flex: 1;
-                        font-family: var(--vscode-editor-font-family);
-                        font-size: var(--vscode-editor-font-size);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 13px;
                         line-height: 1.4;
-                        color: var(--vscode-editor-foreground);
+                        color: #00ff00;
                         white-space: pre-wrap;
                     }
                 </style>
@@ -389,10 +390,10 @@ export class CommentManager {
                 <title>AI Analysis - ${fileName}</title>
                 <style>
                     body {
-                        font-family: var(--vscode-font-family);
-                        font-size: var(--vscode-font-size);
-                        color: var(--vscode-foreground);
-                        background-color: var(--vscode-editor-background);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 14px;
+                        color: #00ff00;
+                        background: #000;
                         padding: 0;
                         margin: 0;
                         height: 100vh;
@@ -401,19 +402,19 @@ export class CommentManager {
                     }
 
                     .header {
-                        background-color: var(--vscode-panel-background);
-                        border-bottom: 1px solid var(--vscode-panel-border);
+                        background: #111;
+                        border-bottom: 1px solid #333;
                         padding: 15px 20px;
                     }
 
                     .header h2 {
                         margin: 0 0 8px 0;
-                        color: var(--vscode-panelTitle-activeForeground);
+                        color: #00ff00;
                         font-size: 1.2em;
                     }
 
                     .level-info {
-                        color: var(--vscode-descriptionForeground);
+                        color: #00aa00;
                         font-size: 0.9em;
                         margin-bottom: 15px;
                     }
@@ -426,10 +427,10 @@ export class CommentManager {
                     }
 
                     .summary-text {
-                        font-family: var(--vscode-editor-font-family);
-                        font-size: var(--vscode-editor-font-size);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 13px;
                         line-height: 1.6;
-                        color: var(--vscode-editor-foreground);
+                        color: #00ff00;
                         white-space: pre-wrap;
                     }
                 </style>
@@ -460,10 +461,10 @@ export class CommentManager {
                 <title>AI Analysis - ${fileName}</title>
                 <style>
                     body {
-                        font-family: var(--vscode-font-family);
-                        font-size: var(--vscode-font-size);
-                        color: var(--vscode-foreground);
-                        background-color: var(--vscode-editor-background);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 14px;
+                        color: #00ff00;
+                        background: #000;
                         padding: 0;
                         margin: 0;
                         height: 100vh;
@@ -473,7 +474,7 @@ export class CommentManager {
                     }
                     .loading {
                         text-align: center;
-                        color: var(--vscode-descriptionForeground);
+                        color: #00aa00;
                         font-style: italic;
                     }
                 </style>
@@ -495,16 +496,16 @@ export class CommentManager {
                 <title>AI Analysis - ${fileName}</title>
                 <style>
                     body {
-                        font-family: var(--vscode-font-family);
-                        font-size: var(--vscode-font-size);
-                        color: var(--vscode-foreground);
-                        background-color: var(--vscode-editor-background);
+                        font-family: 'SF Mono', Monaco, monospace;
+                        font-size: 14px;
+                        color: #00ff00;
+                        background: #000;
                         padding: 20px;
                     }
                     .error {
-                        color: var(--vscode-errorForeground);
-                        background-color: var(--vscode-inputValidation-errorBackground);
-                        border: 1px solid var(--vscode-inputValidation-errorBorder);
+                        color: #ff4444;
+                        background: #330000;
+                        border: 1px solid #ff4444;
                         padding: 15px;
                         border-radius: 4px;
                     }
@@ -731,6 +732,89 @@ ${allSummaries.join('\n\n')}
             this.commentsEditor.revealRange(range, vscode.TextEditorRevealType.InCenter);
             
             console.log(`Synced cursor: Original line ${currentLine} → Comments line ${commentsLine}`);
+        });
+    }
+
+    private generateTerminalHTML(fileName: string, commentsContent: string): string {
+        // Split into individual lines for highlighting
+        const commentLines = commentsContent.split('\n');
+        
+        let lineElements = '';
+        commentLines.forEach((comment, index) => {
+            const lineNum = index + 1;
+            lineElements += `<div class="line" id="line-${index}">${lineNum}  ${this.escapeHtml(comment)}</div>\n`;
+        });
+
+        return `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { 
+                        font-family: 'SF Mono', Monaco, monospace; 
+                        background: #000; 
+                        color: #00ff00; 
+                        padding: 20px; 
+                        line-height: 1.4;
+                        margin: 0;
+                    }
+                    .line {
+                        padding: 2px 0;
+                        transition: all 0.2s ease;
+                    }
+                    .line.highlighted {
+                        background: #00ff00;
+                        color: #000;
+                        padding: 2px 8px;
+                        margin: 0 -8px;
+                        border-radius: 4px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="content">
+                    ${lineElements}
+                </div>
+                
+                <script>
+                    window.addEventListener('message', event => {
+                        const message = event.data;
+                        if (message.command === 'highlightLine') {
+                            document.querySelectorAll('.line.highlighted').forEach(line => {
+                                line.classList.remove('highlighted');
+                            });
+                            
+                            const targetLine = document.getElementById('line-' + message.line);
+                            if (targetLine) {
+                                targetLine.classList.add('highlighted');
+                                targetLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }
+                    });
+                </script>
+            </body>
+            </html>
+        `;
+    }
+
+    private setupWebviewCursorSync(): void {
+        if (this.cursorSyncDisposable) {
+            this.cursorSyncDisposable.dispose();
+        }
+
+        this.cursorSyncDisposable = vscode.window.onDidChangeTextEditorSelection((event) => {
+            if (!this.originalFilePath || !this.currentPanel) return;
+            
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor || activeEditor.document.fileName !== this.originalFilePath) return;
+
+            const currentLine = activeEditor.selection.active.line;
+            
+            this.currentPanel.webview.postMessage({
+                command: 'highlightLine',
+                line: currentLine
+            });
         });
     }
 }
