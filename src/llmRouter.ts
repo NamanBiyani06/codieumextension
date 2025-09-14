@@ -23,43 +23,21 @@ export interface CommentResponse {
 }
 
 export class LLMRouter {
-    private configs: Map<string, LLMConfig> = new Map();
-    private defaultConfig: LLMConfig;
+    private config: LLMConfig;
 
     constructor() {
-        // Initialize with Martian API as default
-        this.defaultConfig = {
+        // Martian handles all LLM routing internally
+        this.config = {
             name: 'martian',
             apiUrl: 'https://api.withmartian.com/v1/chat/completions',
             apiKey: process.env.MARTIAN_API_KEY || '',
-            model: 'martian/code' // Use Martian's smart routing for code tasks
+            model: 'martian/code' // Martian's smart routing for code tasks
         };
-        this.configs.set('martian', this.defaultConfig);
-
-        // Add other LLM configurations
-        this.configs.set('openai-gpt4', {
-            name: 'openai-gpt4',
-            apiUrl: 'https://api.openai.com/v1/chat/completions',
-            apiKey: process.env.OPENAI_API_KEY || '',
-            model: 'gpt-4o'
-        });
-
-        this.configs.set('openai-gpt5', {
-            name: 'openai-gpt5',
-            apiUrl: 'https://api.openai.com/v1/chat/completions',
-            apiKey: process.env.OPENAI_API_KEY || '',
-            model: 'gpt-5'
-        });
-    }
-
-    private selectModel(request: CommentRequest): LLMConfig {
-        // Always use Martian - it has the API key hardcoded
-        return this.defaultConfig;
     }
 
     async generateComments(request: CommentRequest): Promise<CommentResponse> {
         try {
-            const config = this.selectModel(request);
+            const config = this.config;
             
             console.log(`Selected model: ${config.name}, API Key present: ${!!config.apiKey}`);
             console.log(`API Key value: ${config.apiKey?.substring(0, 10)}...`);
