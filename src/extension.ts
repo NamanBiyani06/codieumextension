@@ -29,7 +29,7 @@ const ABSTRACTION_LEVELS = {
 	2: { name: 'Key Components', prompt: 'Summarize the main components and their primary purposes in 2-3 sentences.' },
 	3: { name: 'Functional Summary', prompt: 'Explain the key functions, classes, and their interactions in a paragraph.' },
 	4: { name: 'Detailed Analysis', prompt: 'Provide a detailed explanation of the code structure, logic flow, and important implementation details.' },
-	5: { name: 'Complete Breakdown', prompt: 'Give a comprehensive analysis including all functions, variables, edge cases, and technical implementation details.' }
+	5: { name: 'Line-by-Line Summary', prompt: 'Provide a detailed summary for each line of code.' }
 };
 
 // Simple in-memory database for storing summaries
@@ -139,11 +139,49 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Function to generate simple summary format
 	async function generateSimpleSummary(code: string, level: number): Promise<string> {
-		// Simple format: "Abstraction level X + TEXT OF FILE SELECTED"
 		// Simulate processing time (remove this later when connecting to AI)
 		await new Promise(resolve => setTimeout(resolve, 500));
 
-		return `Abstraction level ${level} + ${code}`;
+		if (level === 5) {
+			// Level 5: Line-by-line analysis
+			return generateLineByLineSummary(code);
+		} else {
+			// Other levels: regular summary
+			return `Abstraction level ${level} + ${code}`;
+		}
+	}
+
+	// Function to generate line-by-line summary for level 5
+	function generateLineByLineSummary(code: string): string {
+		const lines = code.split('\n');
+		const summaryLines = lines.map((line, index) => {
+			const lineNum = index + 1;
+			const trimmedLine = line.trim();
+			
+			if (trimmedLine === '') {
+				return `${lineNum}. [Empty line]`;
+			} else if (trimmedLine.startsWith('//') || trimmedLine.startsWith('*') || trimmedLine.startsWith('/*')) {
+				return `${lineNum}. Comment: ${trimmedLine.substring(0, 50)}${trimmedLine.length > 50 ? '...' : ''}`;
+			} else if (trimmedLine.includes('import') || trimmedLine.includes('require')) {
+				return `${lineNum}. Import statement`;
+			} else if (trimmedLine.includes('function') || trimmedLine.includes('const') || trimmedLine.includes('let') || trimmedLine.includes('var')) {
+				return `${lineNum}. Declaration/definition`;
+			} else if (trimmedLine.includes('if') || trimmedLine.includes('else') || trimmedLine.includes('switch')) {
+				return `${lineNum}. Conditional logic`;
+			} else if (trimmedLine.includes('for') || trimmedLine.includes('while') || trimmedLine.includes('forEach')) {
+				return `${lineNum}. Loop structure`;
+			} else if (trimmedLine.includes('return')) {
+				return `${lineNum}. Return statement`;
+			} else if (trimmedLine.includes('console.log') || trimmedLine.includes('print')) {
+				return `${lineNum}. Debug/logging output`;
+			} else if (trimmedLine === '{' || trimmedLine === '}') {
+				return `${lineNum}. Block delimiter`;
+			} else {
+				return `${lineNum}. Code execution: ${trimmedLine.substring(0, 40)}${trimmedLine.length > 40 ? '...' : ''}`;
+			}
+		});
+		
+		return summaryLines.join('\n');
 	}
 
 	// Function to get or generate summary for current abstraction level
@@ -222,6 +260,8 @@ export function activate(context: vscode.ExtensionContext) {
 			context.subscriptions
 		);
 
+		// No editor scroll tracking - user has full control over panel scrolling
+
 		// Set the webview content
 		updatePanelContent();
 
@@ -257,6 +297,424 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Function to generate HTML for the panel
 	function generateHTML(fileName: string, content: string, isLoading: boolean = false): string {
+		// For level 5, generate side-by-side view
+		if (currentAbstractionLevel === 5 && !isLoading) {
+			return generateLineByLineHTML(fileName, content);
+		}
+
+		return `
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<title>AI Code Analysis</title>
+				<style>
+					body {
+						font-family: var(--vscode-font-family);
+						font-size: var(--vscode-font-size);
+						color: var(--vscode-foreground);
+						background-color: var(--vscode-editor-background);
+						padding: 0;
+						margin: 0;
+						line-height: 1.6;
+						height: 100vh;
+						display: flex;
+						flex-direction: column;
+					}
+
+					.slider-container {
+						position: fixed;
+						bottom: 20px;
+						right: 20px;
+						z-index: 1000;
+						background-color: var(--vscode-panel-background);
+						border: 1px solid var(--vscode-panel-border);
+						border-radius: 6px;
+						padding: 8px 12px;
+						box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+						opacity: 0.7;
+						transition: opacity 0.2s ease;
+					}
+
+					.slider-container:hover {
+						opacity: 1;
+					}
+
+					.slider-wrapper {
+						display: flex;
+						align-items: center;
+						gap: 8px;
+						min-width: 120px;
+					}
+
+					.slider-text {
+						font-size: 0.7em;
+						color: var(--vscode-descriptionForeground);
+						min-width: 20px;
+						text-align: center;
+					}
+
+					.slider {
+						flex: 1;
+						height: 3px;
+						border-radius: 2px;
+						background: var(--vscode-scrollbarSlider-background);
+						outline: none;
+						-webkit-appearance: none;
+						appearance: none;
+					}
+
+					.slider::-webkit-slider-thumb {
+						-webkit-appearance: none;
+						appearance: none;
+						width: 12px;
+						height: 12px;
+						border-radius: 50%;
+						background: var(--vscode-button-background);
+						cursor: pointer;
+					}
+
+					.slider::-moz-range-thumb {
+						width: 12px;
+						height: 12px;
+						border-radius: 50%;
+						background: var(--vscode-button-background);
+						cursor: pointer;
+						border: none;
+					}
+
+					.content {
+						flex: 1;
+						padding: 20px;
+						overflow-y: auto;
+						padding-bottom: 80px; /* Space for floating slider */
+					}
+
+					.summary-text {
+						font-family: var(--vscode-editor-font-family);
+						font-size: var(--vscode-editor-font-size);
+						line-height: 1.6;
+						color: var(--vscode-editor-foreground);
+						white-space: pre-wrap;
+					}
+
+					.loading {
+						color: var(--vscode-descriptionForeground);
+						font-style: italic;
+					}
+				</style>
+			</head>
+			<body>
+				<div class="content">
+					<div class="summary-text ${isLoading ? 'loading' : ''}">${escapeHtml(content)}</div>
+				</div>
+
+				<div class="slider-container">
+					<div class="slider-wrapper">
+						<span class="slider-text">1</span>
+						<input type="range" min="1" max="5" value="${currentAbstractionLevel}" class="slider" id="abstractionSlider">
+						<span class="slider-text">5</span>
+					</div>
+				</div>
+
+				<script>
+					const vscode = acquireVsCodeApi();
+					const slider = document.getElementById('abstractionSlider');
+
+					slider.addEventListener('input', (e) => {
+						vscode.postMessage({
+							command: 'changeLevel',
+							level: parseInt(e.target.value)
+						});
+					});
+				</script>
+			</body>
+			</html>
+		`;
+	}
+
+	// Function to generate line-by-line HTML view for level 5
+	function generateLineByLineHTML(fileName: string, summaryContent: string): string {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			return generateRegularHTML(fileName, summaryContent);
+		}
+
+		const code = activeEditor.document.getText();
+		const codeLines = code.split('\n');
+		const summaryLines = summaryContent.split('\n');
+
+		// Generate line numbers and content for both sides
+		let codeWithLineNumbers = '';
+		let summaryWithLineNumbers = '';
+		
+		for (let i = 0; i < Math.max(codeLines.length, summaryLines.length); i++) {
+			const codeLine = codeLines[i] || '';
+			const summaryLine = summaryLines[i] || '';
+			const lineNum = i + 1;
+			
+			codeWithLineNumbers += `<div class="code-line-row">
+				<span class="line-num">${lineNum}</span>
+				<span class="code-content">${escapeHtml(codeLine)}</span>
+			</div>`;
+			
+			summaryWithLineNumbers += `<div class="summary-line-row">
+				<span class="summary-content">${escapeHtml(summaryLine)}</span>
+			</div>`;
+		}
+
+		return `
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<title>Line-by-Line Analysis</title>
+				<style>
+					body {
+						font-family: var(--vscode-font-family);
+						font-size: var(--vscode-font-size);
+						color: var(--vscode-foreground);
+						background-color: var(--vscode-editor-background);
+						padding: 0;
+						margin: 0;
+					}
+
+					.container {
+						height: 100vh;
+						display: flex;
+						flex-direction: column;
+					}
+
+					.slider-container {
+						position: fixed;
+						bottom: 20px;
+						right: 20px;
+						z-index: 1000;
+						background-color: var(--vscode-panel-background);
+						border: 1px solid var(--vscode-panel-border);
+						border-radius: 6px;
+						padding: 8px 12px;
+						box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+						opacity: 0.7;
+						transition: opacity 0.2s ease;
+					}
+
+					.slider-container:hover {
+						opacity: 1;
+					}
+
+					.slider-wrapper {
+						display: flex;
+						align-items: center;
+						gap: 8px;
+						min-width: 120px;
+					}
+
+					.slider-text {
+						font-size: 0.7em;
+						color: var(--vscode-descriptionForeground);
+						min-width: 20px;
+						text-align: center;
+					}
+
+					.slider {
+						flex: 1;
+						height: 3px;
+						border-radius: 2px;
+						background: var(--vscode-scrollbarSlider-background);
+						outline: none;
+						-webkit-appearance: none;
+						appearance: none;
+					}
+
+					.slider::-webkit-slider-thumb {
+						-webkit-appearance: none;
+						appearance: none;
+						width: 12px;
+						height: 12px;
+						border-radius: 50%;
+						background: var(--vscode-button-background);
+						cursor: pointer;
+					}
+
+					.slider::-moz-range-thumb {
+						width: 12px;
+						height: 12px;
+						border-radius: 50%;
+						background: var(--vscode-button-background);
+						cursor: pointer;
+						border: none;
+					}
+
+					.split-view {
+						flex: 1;
+						display: flex;
+					}
+
+					.code-panel, .summary-panel {
+						flex: 1;
+						display: flex;
+						flex-direction: column;
+					}
+
+					.summary-panel {
+						border-left: 1px solid var(--vscode-panel-border);
+					}
+
+					.panel-header {
+						background-color: var(--vscode-panel-background);
+						border-bottom: 1px solid var(--vscode-panel-border);
+						padding: 4px 8px;
+						font-size: 0.75em;
+						font-weight: 600;
+						color: var(--vscode-panelTitle-activeForeground);
+					}
+
+					.panel-content {
+						flex: 1;
+						overflow-y: auto;
+						overflow-x: auto;
+						font-family: var(--vscode-editor-font-family);
+						font-size: var(--vscode-editor-font-size);
+						line-height: 19px;
+					}
+
+					.code-line-row, .summary-line-row {
+						display: flex;
+						height: 19px;
+						min-height: 19px;
+						max-height: 19px;
+						align-items: flex-start;
+						box-sizing: border-box;
+					}
+
+					.code-line-row:hover {
+						background-color: var(--vscode-list-hoverBackground);
+					}
+
+					.line-num {
+						min-width: 40px;
+						width: 40px;
+						text-align: right;
+						padding: 0 8px 0 4px;
+						background-color: var(--vscode-editorLineNumber-background);
+						color: var(--vscode-editorLineNumber-foreground);
+						font-weight: 400;
+						user-select: none;
+						opacity: 0.8;
+						font-size: var(--vscode-editor-font-size);
+						line-height: 19px;
+						box-sizing: border-box;
+						flex-shrink: 0;
+					}
+
+					.code-content {
+						flex: 1;
+						padding: 0 8px;
+						white-space: pre;
+						font-family: var(--vscode-editor-font-family);
+						font-size: var(--vscode-editor-font-size);
+						line-height: 19px;
+						background-color: var(--vscode-editor-background);
+					}
+
+					.summary-content {
+						flex: 1;
+						padding: 0 8px;
+						background-color: var(--vscode-editor-background);
+						color: var(--vscode-descriptionForeground);
+						font-size: var(--vscode-editor-font-size);
+						line-height: 19px;
+					}
+
+					.summary-line-row {
+						background-color: var(--vscode-editor-background);
+					}
+
+					.summary-line-row:hover {
+						background-color: var(--vscode-list-hoverBackground);
+					}
+
+					/* Sync scroll styling */
+					.panel-content::-webkit-scrollbar {
+						width: 8px;
+					}
+
+					.panel-content::-webkit-scrollbar-track {
+						background: var(--vscode-scrollbarSlider-background);
+					}
+
+					.panel-content::-webkit-scrollbar-thumb {
+						background: var(--vscode-scrollbarSlider-hoverBackground);
+						border-radius: 4px;
+					}
+				</style>
+			</head>
+			<body>
+				<div class="container">
+					<div class="split-view">
+						<div class="code-panel">
+							<div class="panel-header">Source Code</div>
+							<div class="panel-content" id="codePanel">
+								${codeWithLineNumbers}
+							</div>
+						</div>
+						<div class="summary-panel">
+							<div class="panel-header">Line Analysis</div>
+							<div class="panel-content" id="summaryPanel">
+								${summaryWithLineNumbers}
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="slider-container">
+					<div class="slider-wrapper">
+						<span class="slider-text">1</span>
+						<input type="range" min="1" max="5" value="5" class="slider" id="abstractionSlider">
+						<span class="slider-text">5</span>
+					</div>
+				</div>
+
+				<script>
+					const vscode = acquireVsCodeApi();
+					const slider = document.getElementById('abstractionSlider');
+					const codePanel = document.getElementById('codePanel');
+					const summaryPanel = document.getElementById('summaryPanel');
+
+					// No scroll synchronization - allow free scrolling on both panels
+
+					// Handle messages from extension
+					window.addEventListener('message', event => {
+						const message = event.data;
+						switch (message.command) {
+							case 'scrollToLine':
+								scrollToEditorLine(message.startLine, message.endLine, message.totalLines, message.scrollPercentage);
+								break;
+						}
+					});
+
+					function scrollToEditorLine(startLine, endLine, totalLines, scrollPercentage) {
+						// No automatic scrolling - user has full control
+						// This function is now disabled to allow free scrolling
+					}
+
+					slider.addEventListener('input', (e) => {
+						vscode.postMessage({
+							command: 'changeLevel',
+							level: parseInt(e.target.value)
+						});
+					});
+				</script>
+			</body>
+			</html>
+		`;
+	}
+
+	// Function to generate regular HTML for other levels
+	function generateRegularHTML(fileName: string, content: string, isLoading: boolean = false): string {
 		return `
 			<!DOCTYPE html>
 			<html lang="en">
