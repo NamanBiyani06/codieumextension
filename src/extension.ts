@@ -8,7 +8,6 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { CommentManager } from './commentManager';
 import * as dotenv from 'dotenv';
-import * as path from 'path';
 
 const SAMPLE_TEXT_VIEW_TYPE = 'sampleTextPanel.view';
 
@@ -27,6 +26,19 @@ let debounceTimer: NodeJS.Timeout | undefined = undefined;
 let currentAbstractionLevel: number = 3; // 1=most abstract, 5=most detailed
 
 export function activate(context: vscode.ExtensionContext) {
+	// Load environment variables from .env file
+	const envPath = path.join(context.extensionPath, '.env');
+	const workspaceEnvPath = path.join(context.extensionPath, '..', '.env');
+	console.log('Loading .env from:', envPath);
+	console.log('Workspace .env path:', workspaceEnvPath);
+	
+	// Try both paths
+	dotenv.config({ path: envPath });
+	dotenv.config({ path: workspaceEnvPath });
+	
+	console.log('MARTIAN_API_KEY loaded:', !!process.env.MARTIAN_API_KEY);
+	console.log('API Key value (first 10 chars):', process.env.MARTIAN_API_KEY?.substring(0, 10));
+
 	// Load environment variables from .env file
 	const envPath = path.join(context.extensionPath, '.env');
 	const workspaceEnvPath = path.join(context.extensionPath, '..', '.env');
@@ -129,6 +141,7 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 		});
 	});
 
+	context.subscriptions.push(disposable1, disposable2);
 	context.subscriptions.push(disposable3);
 
 	function escapeHtml(text: string): string {
