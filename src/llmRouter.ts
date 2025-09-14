@@ -31,7 +31,7 @@ export class LLMRouter {
         this.defaultConfig = {
             name: 'martian',
             apiUrl: 'https://api.withmartian.com/v1/chat/completions',
-            apiKey: 'sk-045c3480fc3d48768d4e471cd9701fbb',
+            apiKey: process.env.MARTIAN_API_KEY || '',
             model: 'martian/code' // Use Martian's smart routing for code tasks
         };
         this.configs.set('martian', this.defaultConfig);
