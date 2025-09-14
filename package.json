@@ -62,6 +62,10 @@
       {
         "command": "codieumextension.switchToLevel5",
         "title": "Switch to Level 5: Line-by-Line Comments"
+      },
+      {
+        "command": "codieumextension.batchExportComments",
+        "title": "Export Comments for Cursor"
       }
     ]
   },

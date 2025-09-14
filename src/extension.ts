@@ -123,6 +123,23 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 
 	context.subscriptions.push(disposable4);
 
+	// Register batch export comments command
+	const disposable5 = vscode.commands.registerCommand('codieumextension.batchExportComments', async () => {
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: "Exporting Comments for Cursor",
+			cancellable: false
+		}, async (progress) => {
+			try {
+				await commentManager.batchExportComments(progress);
+			} catch (error: any) {
+				vscode.window.showErrorMessage(`Failed to export comments: ${error.message}`);
+			}
+		});
+	});
+
+	context.subscriptions.push(disposable5);
+
 	// Create status bar items for comment level switching
 	const statusBarItems: vscode.StatusBarItem[] = [];
 	
