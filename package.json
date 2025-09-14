@@ -63,6 +63,5 @@
     "eslint": "^9.34.0",
     "typescript": "^5.9.2",
     "vsce": "^1.103.1"
-    "typescript": "^5.9.2"
   }
 }

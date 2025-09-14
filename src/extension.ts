@@ -8,7 +8,6 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { CommentManager } from './commentManager';
 import * as dotenv from 'dotenv';
-import * as path from 'path';
 
 const SAMPLE_TEXT_VIEW_TYPE = 'sampleTextPanel.view';
 
@@ -55,6 +54,15 @@ export function activate(context: vscode.ExtensionContext) {
 		// Display a message box to the user
 		vscode.window.showInformationMessage('Hello World from codeium!');
 	});
+
+	context.subscriptions.push(disposable1);
+
+	// Register showStatus command
+	const disposable2 = vscode.commands.registerCommand('codieumextension.showStatus', () => {
+		vscode.window.showInformationMessage('Extension is active and ready!');
+	});
+
+	context.subscriptions.push(disposable2);
 
 // Abstraction levels configuration
 const ABSTRACTION_LEVELS = {
@@ -108,9 +116,8 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 		vscode.window.showInformationMessage('No active editor found.');
 		return;
 	}
-		}
 
-		const filePath = editor.document.fileName;
+	const filePath = editor.document.fileName;
 		
 		// Show progress
 		await vscode.window.withProgress({
@@ -131,12 +138,13 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 
 	context.subscriptions.push(disposable3);
 
-	function escapeHtml(text: string): string {
-		return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-	}
-}
+	// Register showUnifiedCommentPanel command
+	const disposable4 = vscode.commands.registerCommand('codieumextension.showUnifiedCommentPanel', () => {
+		vscode.window.showInformationMessage('Unified Comment Panel - Coming Soon!');
+	});
 
-export function activate(context: vscode.ExtensionContext) {
+	context.subscriptions.push(disposable4);
+
 	// Load database from disk on activation
 	loadDatabaseFromDisk();
 
