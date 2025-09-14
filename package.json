@@ -12,7 +12,13 @@
   "activationEvents": [
     "onCommand:codieumextension.helloWorld",
     "onCommand:codieumextension.showStatus",
-    "onCommand:codieumextension.showCodeCommentsPanel"
+    "onCommand:codieumextension.showCodeCommentsPanel",
+    "onCommand:codieumextension.showUnifiedCommentPanel",
+    "onCommand:codieumextension.switchToLevel1",
+    "onCommand:codieumextension.switchToLevel2",
+    "onCommand:codieumextension.switchToLevel3",
+    "onCommand:codieumextension.switchToLevel4",
+    "onCommand:codieumextension.switchToLevel5"
   ],
   "repository": {
     "type": "git",
@@ -36,6 +42,26 @@
       {
         "command": "codieumextension.showUnifiedCommentPanel",
         "title": "Show Unified Comment Panel"
+      },
+      {
+        "command": "codieumextension.switchToLevel1",
+        "title": "Switch to Level 1: High-Level Comments"
+      },
+      {
+        "command": "codieumextension.switchToLevel2",
+        "title": "Switch to Level 2: Component Comments"
+      },
+      {
+        "command": "codieumextension.switchToLevel3",
+        "title": "Switch to Level 3: Functional Comments"
+      },
+      {
+        "command": "codieumextension.switchToLevel4",
+        "title": "Switch to Level 4: Detailed Comments"
+      },
+      {
+        "command": "codieumextension.switchToLevel5",
+        "title": "Switch to Level 5: Line-by-Line Comments"
       }
     ]
   },

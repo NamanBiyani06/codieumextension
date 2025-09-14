@@ -13,7 +13,7 @@ export class CommentManager {
         this.llmRouter = new LLMRouter();
     }
 
-    async generateCommentsForFile(filePath: string): Promise<string[]> {
+    async generateCommentsForFile(filePath: string, abstractionLevel: number = 5): Promise<string[]> {
         try {
             // Check if file exists
             if (!fs.existsSync(filePath)) {
@@ -25,24 +25,26 @@ export class CommentManager {
             const fileName = path.basename(filePath);
             const language = this.detectLanguage(fileName);
 
-            // Check cache first
+            // Check cache first (include abstraction level in cache key)
+            const cacheKey = `${filePath}:level${abstractionLevel}`;
             const fileHash = this.calculateHash(content);
-            const cachedHash = this.hashCache.get(filePath);
+            const cachedHash = this.hashCache.get(cacheKey);
             
             if (cachedHash === fileHash) {
-                const cachedComments = this.commentCache.get(filePath);
+                const cachedComments = this.commentCache.get(cacheKey);
                 if (cachedComments) {
-                    console.log('Using cached comments for:', fileName);
+                    console.log('Using cached comments for:', fileName, 'level', abstractionLevel);
                     return cachedComments.split('\n');
                 }
             }
 
             // Generate new comments
-            console.log('Generating new comments for:', fileName);
+            console.log('Generating new comments for:', fileName, 'level', abstractionLevel);
             const request: CommentRequest = {
                 code: content,
                 language,
-                fileName
+                fileName,
+                abstractionLevel
             };
 
             const response: CommentResponse = await this.llmRouter.generateComments(request);
@@ -53,8 +55,8 @@ export class CommentManager {
 
             // Cache the results
             const commentsText = response.comments.join('\n');
-            this.commentCache.set(filePath, commentsText);
-            this.hashCache.set(filePath, fileHash);
+            this.commentCache.set(cacheKey, commentsText);
+            this.hashCache.set(cacheKey, fileHash);
 
             return response.comments;
 
@@ -64,10 +66,10 @@ export class CommentManager {
         }
     }
 
-    async showCommentsSideBySide(originalFilePath: string): Promise<void> {
+    async showCommentsSideBySide(originalFilePath: string, abstractionLevel: number = 5): Promise<void> {
         try {
             // Generate comments
-            const comments = await this.generateCommentsForFile(originalFilePath);
+            const comments = await this.generateCommentsForFile(originalFilePath, abstractionLevel);
             
             // Create comments content
             const commentsContent = comments.join('\n');
@@ -87,6 +89,83 @@ export class CommentManager {
 
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to generate comments: ${error.message}`);
+        }
+    }
+
+    private currentPanel: vscode.WebviewPanel | undefined = undefined;
+    private currentFilePath: string | undefined = undefined;
+    private currentLevel: number = 5;
+
+    async showUnifiedCommentsPanel(originalFilePath: string, initialLevel: number = 5): Promise<void> {
+        try {
+            const fileName = path.basename(originalFilePath);
+            this.currentFilePath = originalFilePath;
+            this.currentLevel = initialLevel;
+            
+            // Create webview panel
+            this.currentPanel = vscode.window.createWebviewPanel(
+                'aiCommentsPanel',
+                `AI Comments: ${fileName}`,
+                vscode.ViewColumn.Beside,
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true
+                }
+            );
+
+            // Initial content
+            await this.updatePanelContent(this.currentLevel);
+
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to create AI comments panel: ${error.message}`);
+        }
+    }
+
+    async switchToLevel(level: number): Promise<void> {
+        // If no panel is open, try to open one with the current active editor
+        if (!this.currentPanel || !this.currentFilePath) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) {
+                vscode.window.showWarningMessage('No active editor found. Please open a code file first.');
+                return;
+            }
+
+            const filePath = activeEditor.document.fileName;
+            const fileName = path.basename(filePath);
+            
+            // Check if it's a code file
+            const language = this.detectLanguage(fileName);
+            if (language === 'text') {
+                vscode.window.showWarningMessage('Please open a code file to generate AI comments.');
+                return;
+            }
+
+            // Auto-open the panel with the requested level
+            await this.showUnifiedCommentsPanel(filePath, level);
+            return;
+        }
+
+        // Panel is already open, just switch the level
+        this.currentLevel = level;
+        await this.updatePanelContent(level);
+    }
+
+    private async updatePanelContent(level: number): Promise<void> {
+        if (!this.currentPanel || !this.currentFilePath) {
+            return;
+        }
+
+        const fileName = path.basename(this.currentFilePath);
+        
+        try {
+            this.currentPanel.webview.html = this.generateLoadingHTML(fileName, level);
+            
+            const comments = await this.generateCommentsForFile(this.currentFilePath, level);
+            const content = comments.join('\n');
+            
+            this.currentPanel.webview.html = this.generateUnifiedHTML(fileName, content, level);
+        } catch (error: any) {
+            this.currentPanel.webview.html = this.generateErrorHTML(fileName, error.message);
         }
     }
 
@@ -141,6 +220,302 @@ export class CommentManager {
             commentCount: this.commentCache.size,
             hashCount: this.hashCache.size
         };
+    }
+
+    private generateUnifiedHTML(fileName: string, content: string, level: number): string {
+        const levelNames = {
+            1: 'High-Level Overview',
+            2: 'Key Components', 
+            3: 'Functional Summary',
+            4: 'Detailed Analysis',
+            5: 'Line-by-Line Comments'
+        };
+
+        const levelDescriptions = {
+            1: 'Single sentence summary of overall purpose',
+            2: 'Main components and their purposes',
+            3: 'Key functions and interactions',
+            4: 'Code structure and implementation details',
+            5: 'AI-generated comments for each line'
+        };
+
+        const isLineByLine = level === 5;
+
+        if (isLineByLine) {
+            return this.generateLineByLineHTML(fileName, content, level);
+        } else {
+            return this.generateSummaryHTML(fileName, content, level, levelNames[level as keyof typeof levelNames], levelDescriptions[level as keyof typeof levelDescriptions]);
+        }
+    }
+
+    private generateLineByLineHTML(fileName: string, content: string, level: number): string {
+        // For line-by-line, we'll show the comments in a structured format
+        const commentLines = content.split('\n');
+        
+        let commentRows = '';
+        commentLines.forEach((comment, index) => {
+            const lineNum = index + 1;
+            commentRows += `
+                <div class="comment-row">
+                    <span class="line-number">${lineNum}</span>
+                    <span class="comment-text">${this.escapeHtml(comment || '')}</span>
+                </div>
+            `;
+        });
+
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>AI Comments - ${fileName}</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        font-size: var(--vscode-font-size);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 0;
+                        margin: 0;
+                        height: 100vh;
+                        display: flex;
+                        flex-direction: column;
+                    }
+
+                    .header {
+                        background-color: var(--vscode-panel-background);
+                        border-bottom: 1px solid var(--vscode-panel-border);
+                        padding: 15px 20px;
+                    }
+
+                    .header h2 {
+                        margin: 0 0 8px 0;
+                        color: var(--vscode-panelTitle-activeForeground);
+                        font-size: 1.2em;
+                    }
+
+                    .level-info {
+                        color: var(--vscode-descriptionForeground);
+                        font-size: 0.9em;
+                        margin-bottom: 15px;
+                    }
+
+                    .content {
+                        flex: 1;
+                        overflow-y: auto;
+                        padding: 20px;
+                    }
+
+                    .comment-row {
+                        display: flex;
+                        margin-bottom: 8px;
+                        align-items: flex-start;
+                        min-height: 20px;
+                    }
+
+                    .line-number {
+                        min-width: 40px;
+                        width: 40px;
+                        text-align: right;
+                        padding-right: 10px;
+                        color: var(--vscode-editorLineNumber-foreground);
+                        font-family: var(--vscode-editor-font-family);
+                        font-size: var(--vscode-editor-font-size);
+                        user-select: none;
+                        opacity: 0.7;
+                    }
+
+                    .comment-text {
+                        flex: 1;
+                        font-family: var(--vscode-editor-font-family);
+                        font-size: var(--vscode-editor-font-size);
+                        line-height: 1.4;
+                        color: var(--vscode-editor-foreground);
+                        white-space: pre-wrap;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>AI Comments: ${this.escapeHtml(fileName)}</h2>
+                    <div class="level-info">
+                        <strong>Level 5:</strong> Line-by-Line Comments - AI-generated comments for each line
+                    </div>
+                </div>
+                
+                <div class="content">
+                    ${commentRows}
+                </div>
+            </body>
+            </html>
+        `;
+    }
+
+    private generateSummaryHTML(fileName: string, content: string, level: number, levelName: string, levelDescription: string): string {
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>AI Analysis - ${fileName}</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        font-size: var(--vscode-font-size);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 0;
+                        margin: 0;
+                        height: 100vh;
+                        display: flex;
+                        flex-direction: column;
+                    }
+
+                    .header {
+                        background-color: var(--vscode-panel-background);
+                        border-bottom: 1px solid var(--vscode-panel-border);
+                        padding: 15px 20px;
+                    }
+
+                    .header h2 {
+                        margin: 0 0 8px 0;
+                        color: var(--vscode-panelTitle-activeForeground);
+                        font-size: 1.2em;
+                    }
+
+                    .level-info {
+                        color: var(--vscode-descriptionForeground);
+                        font-size: 0.9em;
+                        margin-bottom: 15px;
+                    }
+
+                    .content {
+                        flex: 1;
+                        overflow-y: auto;
+                        padding: 20px;
+                        padding-bottom: 80px;
+                    }
+
+                    .summary-text {
+                        font-family: var(--vscode-editor-font-family);
+                        font-size: var(--vscode-editor-font-size);
+                        line-height: 1.6;
+                        color: var(--vscode-editor-foreground);
+                        white-space: pre-wrap;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>AI Analysis: ${this.escapeHtml(fileName)}</h2>
+                    <div class="level-info">
+                        <strong>Level ${level}:</strong> ${levelName} - ${levelDescription}
+                    </div>
+                </div>
+                
+                <div class="content">
+                    <div class="summary-text">${this.escapeHtml(content)}</div>
+                </div>
+            </body>
+            </html>
+        `;
+    }
+
+    private generateLoadingHTML(fileName: string, level: number): string {
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>AI Analysis - ${fileName}</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        font-size: var(--vscode-font-size);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 0;
+                        margin: 0;
+                        height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .loading {
+                        text-align: center;
+                        color: var(--vscode-descriptionForeground);
+                        font-style: italic;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="loading">Generating AI analysis for ${this.escapeHtml(fileName)}...</div>
+            </body>
+            </html>
+        `;
+    }
+
+    private generateErrorHTML(fileName: string, error: string): string {
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>AI Analysis - ${fileName}</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        font-size: var(--vscode-font-size);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 20px;
+                    }
+                    .error {
+                        color: var(--vscode-errorForeground);
+                        background-color: var(--vscode-inputValidation-errorBackground);
+                        border: 1px solid var(--vscode-inputValidation-errorBorder);
+                        padding: 15px;
+                        border-radius: 4px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h3>Error generating AI analysis for ${this.escapeHtml(fileName)}</h3>
+                    <p>${this.escapeHtml(error)}</p>
+                </div>
+            </body>
+            </html>
+        `;
+    }
+
+    private escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    isCurrentFileCodeFile(): boolean {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            return false;
+        }
+
+        const fileName = path.basename(activeEditor.document.fileName);
+        const language = this.detectLanguage(fileName);
+        return language !== 'text';
+    }
+
+    getCurrentFilePath(): string | undefined {
+        const activeEditor = vscode.window.activeTextEditor;
+        return activeEditor?.document.fileName;
     }
 }
 
