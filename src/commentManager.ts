@@ -11,6 +11,14 @@ export class CommentManager {
 
     constructor() {
         this.llmRouter = new LLMRouter();
+        
+        // Create custom highlight decoration with a nice color
+        this.highlightDecorationType = vscode.window.createTextEditorDecorationType({
+            backgroundColor: 'rgba(255, 193, 7, 0.3)', // Nice amber/yellow background
+            border: '1px solid #ffc107', // Amber border
+            borderRadius: '2px',
+            isWholeLine: true
+        });
     }
 
     async generateCommentsForFile(filePath: string, abstractionLevel: number = 5): Promise<string[]> {
@@ -107,6 +115,7 @@ export class CommentManager {
     private originalFilePath: string | undefined = undefined;
     private commentsEditor: vscode.TextEditor | undefined = undefined;
     private cursorSyncDisposable: vscode.Disposable | undefined = undefined;
+    private highlightDecorationType: vscode.TextEditorDecorationType;
 
     async showUnifiedCommentsPanel(originalFilePath: string, initialLevel: number = 5): Promise<void> {
         try {
@@ -708,11 +717,18 @@ ${allSummaries.join('\n\n')}
             
             // Highlight corresponding line in comments editor
             const commentsLine = Math.min(currentLine, this.commentsEditor.document.lineCount - 1);
-            const newSelection = new vscode.Selection(commentsLine, 0, commentsLine, 0);
+            
+            // Clear previous highlights
+            this.commentsEditor.setDecorations(this.highlightDecorationType, []);
+            
+            // Add new highlight decoration
+            const range = new vscode.Range(commentsLine, 0, commentsLine, 0);
+            this.commentsEditor.setDecorations(this.highlightDecorationType, [range]);
             
             // Set selection and reveal the line in comments editor
+            const newSelection = new vscode.Selection(commentsLine, 0, commentsLine, 0);
             this.commentsEditor.selection = newSelection;
-            this.commentsEditor.revealRange(new vscode.Range(commentsLine, 0, commentsLine, 0), vscode.TextEditorRevealType.InCenter);
+            this.commentsEditor.revealRange(range, vscode.TextEditorRevealType.InCenter);
             
             console.log(`Synced cursor: Original line ${currentLine} → Comments line ${commentsLine}`);
         });
