@@ -83,7 +83,14 @@ export class CommentManager {
             });
 
             // Show both files side by side
-            await vscode.window.showTextDocument(commentsDoc, vscode.ViewColumn.Beside);
+            const commentsEditor = await vscode.window.showTextDocument(commentsDoc, vscode.ViewColumn.Beside);
+            
+            // Store references for hover highlighting
+            this.originalFilePath = originalFilePath;
+            this.commentsEditor = commentsEditor;
+            
+            // Set up cursor sync - when cursor moves in original file, highlight corresponding line in comments
+            this.setupCursorSync();
             
             vscode.window.showInformationMessage(`Smart comments generated for ${fileName} using LLM!`);
 
@@ -95,6 +102,11 @@ export class CommentManager {
     private currentPanel: vscode.WebviewPanel | undefined = undefined;
     private currentFilePath: string | undefined = undefined;
     private currentLevel: number = 5;
+    
+    // Side-by-side highlighting properties
+    private originalFilePath: string | undefined = undefined;
+    private commentsEditor: vscode.TextEditor | undefined = undefined;
+    private cursorSyncDisposable: vscode.Disposable | undefined = undefined;
 
     async showUnifiedCommentsPanel(originalFilePath: string, initialLevel: number = 5): Promise<void> {
         try {
@@ -157,13 +169,19 @@ export class CommentManager {
 
         const fileName = path.basename(this.currentFilePath);
         
+        // Get current cursor position
+        const editor = vscode.window.activeTextEditor;
+        const currentLine = editor ? editor.selection.active.line : 0;
+        
+        console.log(`Updating panel content - Level: ${level}, Current Line: ${currentLine}`);
+        
         try {
             this.currentPanel.webview.html = this.generateLoadingHTML(fileName, level);
             
             const comments = await this.generateCommentsForFile(this.currentFilePath, level);
             const content = comments.join('\n');
             
-            this.currentPanel.webview.html = this.generateUnifiedHTML(fileName, content, level);
+            this.currentPanel.webview.html = this.generateUnifiedHTML(fileName, content, level, currentLine);
         } catch (error: any) {
             this.currentPanel.webview.html = this.generateErrorHTML(fileName, error.message);
         }
@@ -222,7 +240,7 @@ export class CommentManager {
         };
     }
 
-    private generateUnifiedHTML(fileName: string, content: string, level: number): string {
+    private generateUnifiedHTML(fileName: string, content: string, level: number, currentLine: number = 0): string {
         const levelNames = {
             1: 'High-Level Overview',
             2: 'Key Components', 
@@ -656,6 +674,48 @@ ${allSummaries.join('\n\n')}
 
         walkDir(rootPath);
         return codeFiles;
+    }
+
+    updateCurrentLineHighlight(): void {
+        // Only update if panel is open and we're on stage 5 (line-by-line)
+        if (!this.currentPanel || !this.currentFilePath || this.currentLevel !== 5) return;
+
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) return;
+
+        // Update the panel with new current line highlighting
+        this.updatePanelContent(this.currentLevel).catch(error => {
+            console.error('Update current line highlight failed:', error);
+        });
+    }
+
+    private setupCursorSync(): void {
+        // Clean up any existing sync
+        if (this.cursorSyncDisposable) {
+            this.cursorSyncDisposable.dispose();
+        }
+
+        // Set up cursor sync between original file and comments
+        this.cursorSyncDisposable = vscode.window.onDidChangeTextEditorSelection((event) => {
+            // Only sync if the active editor is the original file
+            if (!this.originalFilePath || !this.commentsEditor) return;
+            
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor || activeEditor.document.fileName !== this.originalFilePath) return;
+
+            // Get current line in original file
+            const currentLine = activeEditor.selection.active.line;
+            
+            // Highlight corresponding line in comments editor
+            const commentsLine = Math.min(currentLine, this.commentsEditor.document.lineCount - 1);
+            const newSelection = new vscode.Selection(commentsLine, 0, commentsLine, 0);
+            
+            // Set selection and reveal the line in comments editor
+            this.commentsEditor.selection = newSelection;
+            this.commentsEditor.revealRange(new vscode.Range(commentsLine, 0, commentsLine, 0), vscode.TextEditorRevealType.InCenter);
+            
+            console.log(`Synced cursor: Original line ${currentLine} → Comments line ${commentsLine}`);
+        });
     }
 }
 
