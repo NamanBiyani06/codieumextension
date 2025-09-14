@@ -150,6 +150,13 @@ const disposable3 = vscode.commands.registerCommand('codieumextension.showCodeCo
 
 	context.subscriptions.push(disposable5);
 
+	// Register show storage stats command
+	const disposable6 = vscode.commands.registerCommand('codieumextension.showStorageStats', async () => {
+		commentManager.showStorageStats();
+	});
+
+	context.subscriptions.push(disposable6);
+
 
 	// Create status bar items for comment level switching
 	const statusBarItems: vscode.StatusBarItem[] = [];

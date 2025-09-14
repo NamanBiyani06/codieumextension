@@ -37,7 +37,7 @@
       },
       {
         "command": "codieumextension.showCodeCommentsPanel",
-        "title": "Show Code & Comments Side by Side"
+        "title": "Scope AI"
       },
       {
         "command": "codieumextension.showUnifiedCommentPanel",
@@ -65,7 +65,11 @@
       },
       {
         "command": "codieumextension.batchExportComments",
-        "title": "Export Comments for Cursor"
+        "title": "Scope AI Context Generation"
+      },
+      {
+        "command": "codieumextension.showStorageStats",
+        "title": "Show Comment Storage Stats"
       }
     ]
   },

@@ -3,14 +3,21 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { LLMRouter, CommentRequest, CommentResponse } from './llmRouter';
+import { CommentStorage } from './commentStorage';
 
 export class CommentManager {
     private llmRouter: LLMRouter;
+    private storage: CommentStorage | undefined;
+    
+    // Legacy cache properties (kept for fallback)
     private commentCache: Map<string, string> = new Map();
     private hashCache: Map<string, string> = new Map();
 
     constructor() {
         this.llmRouter = new LLMRouter();
+        
+        // Initialize storage when workspace is available
+        this.initializeStorage();
         
         // Create custom highlight decoration with a nice color
         this.highlightDecorationType = vscode.window.createTextEditorDecorationType({
@@ -19,6 +26,16 @@ export class CommentManager {
             borderRadius: '2px',
             isWholeLine: true
         });
+    }
+
+    private initializeStorage(): void {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            this.storage = new CommentStorage(workspaceFolders[0].uri.fsPath);
+            console.log('Initialized persistent comment storage');
+        } else {
+            console.warn('No workspace folder found, using in-memory cache only');
+        }
     }
 
     async generateCommentsForFile(filePath: string, abstractionLevel: number = 5): Promise<string[]> {
@@ -33,7 +50,16 @@ export class CommentManager {
             const fileName = path.basename(filePath);
             const language = this.detectLanguage(fileName);
 
-            // Check cache first (include abstraction level in cache key)
+            // Check persistent storage first
+            if (this.storage && this.storage.hasComments(filePath, abstractionLevel, content)) {
+                const storedComments = this.storage.getComments(filePath, abstractionLevel);
+                if (storedComments) {
+                    console.log('Using stored comments for:', fileName, 'level', abstractionLevel);
+                    return storedComments;
+                }
+            }
+
+            // Fallback to legacy in-memory cache
             const cacheKey = `${filePath}:level${abstractionLevel}`;
             const fileHash = this.calculateHash(content);
             const cachedHash = this.hashCache.get(cacheKey);
@@ -41,7 +67,7 @@ export class CommentManager {
             if (cachedHash === fileHash) {
                 const cachedComments = this.commentCache.get(cacheKey);
                 if (cachedComments) {
-                    console.log('Using cached comments for:', fileName, 'level', abstractionLevel);
+                    console.log('Using legacy cached comments for:', fileName, 'level', abstractionLevel);
                     return cachedComments.split('\n');
                 }
             }
@@ -61,10 +87,24 @@ export class CommentManager {
                 throw new Error(response.error || 'Failed to generate comments');
             }
 
-            // Cache the results
+            // Store in persistent storage
+            if (this.storage) {
+                this.storage.storeComments(
+                    filePath, 
+                    abstractionLevel, 
+                    response.comments, 
+                    content, 
+                    response.model, 
+                    language
+                );
+                console.log('Stored comments persistently for:', fileName, 'level', abstractionLevel);
+            } else {
+                // Fallback to legacy in-memory cache
             const commentsText = response.comments.join('\n');
             this.commentCache.set(cacheKey, commentsText);
             this.hashCache.set(cacheKey, fileHash);
+                console.log('Stored comments in memory cache for:', fileName, 'level', abstractionLevel);
+            }
 
             return response.comments;
 
@@ -240,15 +280,48 @@ export class CommentManager {
     }
 
     clearCache(): void {
+        // Clear persistent storage
+        if (this.storage) {
+            this.storage.clearAll();
+            console.log('Cleared persistent comment storage');
+        }
+        
+        // Clear legacy in-memory cache
         this.commentCache.clear();
         this.hashCache.clear();
+        console.log('Cleared legacy in-memory cache');
     }
 
-    getCacheStats(): { commentCount: number; hashCount: number } {
-        return {
+    getCacheStats(): { 
+        commentCount: number; 
+        hashCount: number; 
+        persistentStats?: {
+            totalFiles: number;
+            totalComments: number;
+            storageSize: number;
+            version: string;
+        }
+    } {
+        const stats = {
             commentCount: this.commentCache.size,
             hashCount: this.hashCache.size
         };
+
+        // Add persistent storage stats if available
+        if (this.storage) {
+            const persistentStats = this.storage.getStats();
+            return {
+                ...stats,
+                persistentStats: {
+                    totalFiles: persistentStats.totalFiles,
+                    totalComments: persistentStats.totalComments,
+                    storageSize: persistentStats.storageSize,
+                    version: persistentStats.version
+                }
+            };
+        }
+
+        return stats;
     }
 
     private generateUnifiedHTML(fileName: string, content: string, level: number, currentLine: number = 0): string {
@@ -843,18 +916,57 @@ ${allSummaries.join('\n\n')}
         const isCodeFile = this.detectLanguage(path.basename(fileName)) !== 'text';
         
         if (isCodeFile) {
-            console.log(`File changed: ${fileName} - Context may need refresh`);
+            console.log(`File changed: ${fileName} - Stored comments may need refresh`);
+            
+            // Check if we have stored comments for this file
+            if (this.storage) {
+                const content = document.getText();
+                let hasStoredComments = false;
+                
+                // Check all abstraction levels
+                for (let level = 1; level <= 5; level++) {
+                    if (this.storage.hasComments(fileName, level, content)) {
+                        hasStoredComments = true;
+                        break;
+                    }
+                }
+                
+                if (hasStoredComments) {
+                    // File has changed, stored comments are now outdated
+                    console.log(`Stored comments for ${fileName} are outdated due to file changes`);
+                }
+            }
             
             // Show subtle notification
             vscode.window.showInformationMessage(
-                `📝 ${path.basename(fileName)} changed - Context may be outdated`,
-                'Refresh Context'
+                `📝 ${path.basename(fileName)} changed - Stored comments may be outdated`,
+                'Refresh Comments', 'View Storage Stats'
             ).then(selection => {
-                if (selection === 'Refresh Context') {
-                    vscode.commands.executeCommand('codieumextension.batchExportComments');
+                if (selection === 'Refresh Comments') {
+                    // Clear stored comments for this file to force regeneration
+                    if (this.storage) {
+                        for (let level = 1; level <= 5; level++) {
+                            this.storage.removeComments(fileName, level);
+                        }
+                    }
+                    vscode.window.showInformationMessage('Stored comments cleared. New comments will be generated on next request.');
+                } else if (selection === 'View Storage Stats') {
+                    this.showStorageStats();
                 }
             });
         }
+    }
+
+    showStorageStats(): void {
+        // Create storage stats dashboard
+        const panel = vscode.window.createWebviewPanel(
+            'scopeStorage',
+            '💾 Scope Comment Storage Stats',
+            vscode.ViewColumn.One,
+            { enableScripts: true }
+        );
+
+        panel.webview.html = this.generateStorageStatsHTML();
     }
 
     showContextQualityMetrics(): void {
@@ -1023,6 +1135,214 @@ ${allSummaries.join('\n\n')}
                     }
                     function openContext() {
                         vscode.postMessage({ command: 'openContext' });
+                    }
+                </script>
+            </body>
+            </html>
+        `;
+    }
+
+    private generateStorageStatsHTML(): string {
+        if (!this.storage) {
+            return `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Storage Stats</title>
+                    <style>
+                        body {
+                            font-family: 'SF Mono', Monaco, monospace;
+                            background: #000;
+                            color: #ff4444;
+                            padding: 32px;
+                            text-align: center;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>❌ No Persistent Storage Available</h1>
+                    <p>Persistent comment storage is not initialized. Please ensure you have a workspace open.</p>
+                </body>
+                </html>
+            `;
+        }
+
+        const stats = this.storage.getStats();
+        const storedFiles = this.storage.getStoredFiles();
+        
+        let fileList = '';
+        storedFiles.forEach(file => {
+            fileList += `
+                <div class="file-item">
+                    <div class="file-path">${file.filePath}</div>
+                    <div class="file-details">
+                        <span class="levels">Levels: ${file.levels.join(', ')}</span>
+                        <span class="comments">${file.totalComments} comments</span>
+                        <span class="updated">Updated: ${file.lastUpdated.toLocaleString()}</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        return `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Scope Storage Stats</title>
+                <style>
+                    body {
+                        font-family: 'SF Mono', Monaco, monospace;
+                        background: #000;
+                        color: #00ff00;
+                        padding: 32px;
+                        margin: 0;
+                        line-height: 1.6;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 40px;
+                    }
+                    .logo {
+                        font-size: 32px;
+                        margin-bottom: 16px;
+                    }
+                    .title {
+                        font-size: 24px;
+                        font-weight: 600;
+                        margin-bottom: 8px;
+                    }
+                    .subtitle {
+                        color: #00aa00;
+                        font-size: 14px;
+                    }
+                    .stats-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 20px;
+                        margin: 40px 0;
+                    }
+                    .stat-card {
+                        background: #111;
+                        border: 1px solid #333;
+                        border-radius: 8px;
+                        padding: 20px;
+                        text-align: center;
+                    }
+                    .stat-value {
+                        font-size: 32px;
+                        font-weight: 600;
+                        color: #00ff00;
+                        margin-bottom: 8px;
+                    }
+                    .stat-label {
+                        color: #00aa00;
+                        font-size: 14px;
+                    }
+                    .files-section {
+                        margin-top: 40px;
+                    }
+                    .section-title {
+                        font-size: 18px;
+                        font-weight: 600;
+                        margin-bottom: 20px;
+                        color: #00ff00;
+                        border-bottom: 1px solid #333;
+                        padding-bottom: 8px;
+                    }
+                    .file-item {
+                        background: #111;
+                        border: 1px solid #333;
+                        border-radius: 6px;
+                        padding: 16px;
+                        margin-bottom: 12px;
+                    }
+                    .file-path {
+                        font-weight: 600;
+                        color: #00ff00;
+                        margin-bottom: 8px;
+                    }
+                    .file-details {
+                        display: flex;
+                        gap: 20px;
+                        flex-wrap: wrap;
+                        font-size: 12px;
+                        color: #00aa00;
+                    }
+                    .file-details span {
+                        background: #222;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                    }
+                    .actions {
+                        text-align: center;
+                        margin-top: 32px;
+                    }
+                    .btn {
+                        background: #00ff00;
+                        color: #000;
+                        border: none;
+                        padding: 12px 24px;
+                        border-radius: 6px;
+                        font-family: inherit;
+                        font-weight: 600;
+                        cursor: pointer;
+                        margin: 0 8px;
+                    }
+                    .btn.danger {
+                        background: #ff4444;
+                        color: #fff;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo">💾</div>
+                    <div class="title">Scope Comment Storage</div>
+                    <div class="subtitle">Persistent Comment Cache Statistics</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.totalFiles}</div>
+                        <div class="stat-label">Files with Comments</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.totalComments}</div>
+                        <div class="stat-label">Total Comments</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${Math.round(stats.storageSize / 1024)}KB</div>
+                        <div class="stat-label">Storage Size</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.version}</div>
+                        <div class="stat-label">Storage Version</div>
+                    </div>
+                </div>
+
+                <div class="files-section">
+                    <div class="section-title">📁 Stored Files (${storedFiles.length})</div>
+                    ${fileList || '<div style="text-align: center; color: #666; padding: 20px;">No files with stored comments</div>'}
+                </div>
+
+                <div class="actions">
+                    <button class="btn" onclick="refreshStorage()">🔄 Refresh View</button>
+                    <button class="btn danger" onclick="clearStorage()">🗑️ Clear All Comments</button>
+                </div>
+
+                <script>
+                    const vscode = acquireVsCodeApi();
+                    
+                    function refreshStorage() {
+                        window.location.reload();
+                    }
+                    
+                    function clearStorage() {
+                        if (confirm('Are you sure you want to clear all stored comments? This action cannot be undone.')) {
+                            vscode.postMessage({ command: 'clearStorage' });
+                        }
                     }
                 </script>
             </body>
